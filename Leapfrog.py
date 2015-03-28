@@ -16,8 +16,8 @@ def Time(i):
 def Force(r, v):
     return -r
 
-def InitialRevert(r, v):
-    return v-Force(r,v)*DT/2./m
+def InitialPush(r, v):
+    return v+Force(r,v)*DT/2./m
 
 def LeapfrogStep(r, v):
     return r + v*DT, v + Force(r,v)*DT/m
@@ -27,7 +27,7 @@ if __name__=="__main__":
     v=np.random.random((N, Dim))
     m=np.ones((N, Dim))
     rdata=r.copy()
-    v=InitialRevert(r,v)
+    v=InitialPush(r,v)
     
     while(i<=IterFinal):
         r, v = LeapfrogStep(r,v)
