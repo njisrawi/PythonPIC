@@ -1,55 +1,53 @@
 from Dependencies import *
-N=1 #number of bodies
-Dim = 3 #number of dimensions
-TInitial=0.
-TFinal=10.
-DT=1e-3
-i=0
-IterFinal=int(TFinal/DT)
-SamplingRate=IterFinal/1
-IterStep=IterFinal/SamplingRate
-IPoints = np.arange(0, IterFinal+1, IterStep)
-np.random.seed(1)
-
+from Initialization import *
+print "Leapfrog systems online..."
 DEBUG=False
-
+Dim=3
 def Time(i):
     return TInitial+(TFinal-TInitial)/TFinal*i*DT
 
-#Fields
+#Fields - continuous cases
 
-def EField(r):
-    return 0
-
+##def EField(r):
+##    return 0
+##
+##def BField(r):
+##    result=np.zeros_like(r)
+##    result[:,2] = r[:,1]
+##    if DEBUG:
+##        print "field", result
+##    return result
 def BField(r):
-    result=np.zeros_like(r)
-    result[:,2] = r[:,1]
-    if DEBUG:
-        print "field", result
-    return result
+    return np.array([0,0,1])
+##def Force(r, v, EField, BField): #Lorentz
+##    f=q*(EField(r)+np.cross(v, BField(r)))
+##    if DEBUG:
+##        print "force", f
+##    return f
 
 #Particle movement
 
-def Force(r, v): #Lorentz
-    f=q*(EField(r)+np.cross(v, BField(r)))
-    if DEBUG:
-        print "force", f
+def Force(r, v, q, EFieldArray, BFieldFunc):
+##    print "vstack"
+##    print np.vstack((q,q,q))
+    f=np.vstack((q,q,q)).T*np.cross(v, BField(r))
+    f[:,0]+=EFieldArray*q
+##    print f
     return f
+def InitialPush(r, v, q, m, EFieldArray, BFieldFunc):
+    return v+Force(r, v, q, EFieldArray, BFieldFunc)*DT/2./m
 
-def InitialPush(r, v):
-    return v+Force(r,v)*DT/2./m
-
-def LeapfrogStep(r, v):
-    return r + v*DT, v + Force(r,v)*DT/m
+def LeapfrogStep(r, v, q, m, EFieldArray, BFieldFunc):
+    return r + v*DT, v + Force(r, v, q, EFieldArray, BFieldFunc)*DT/m
 
 #Diagnostics
 
-def KineticEnergy(v):
+def KineticEnergy(v, m):
     return np.sum(v*v*m)/2.
 
 #Plotting
 
-def PlotTrajectory2D(r):
+def PlotTrajectory2D(rdata, N):
     for j in range(N):
         plt.plot(rdata[j, 0, :], rdata[j, 1, :], "-")
     plt.xlabel("x")
@@ -72,7 +70,7 @@ def PlotTrajectory2D(r):
     plt.title("2D trajectory")
     plt.show()
 
-def PlotTrajectory3D(r):
+def PlotTrajectory3D(rdata, N):
     fig=plt.figure()
     ax=fig.add_subplot(111,projection='3d')
     for j in range(N):
@@ -82,6 +80,7 @@ def PlotTrajectory3D(r):
     plt.show()    
 
 def EPlot(edata):
+    print Time(IPoints).shape, edata.shape
     plt.plot(Time(IPoints),edata[0,0,:])
     plt.xlabel("Time")
     plt.ylabel("Energy")

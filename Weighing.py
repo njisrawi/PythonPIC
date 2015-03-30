@@ -1,5 +1,6 @@
 from Dependencies import *
-
+from Initialization import *
+print "Weighing and fields..."
 DEBUG=False
 
 def LinearInterpolateToGrid(position, weight, gridpoints):
@@ -38,6 +39,40 @@ def LinearInterpolateToGrid(position, weight, gridpoints):
         i+=1
     return interpolatedresult/gridspacing
 
+def EFieldInterpolator(positions, gridpoints, field):
+    gridspacing=gridpoints[1]-gridpoints[0]
+    interpolatedresult=np.zeros_like(positions)
+    i=0
+    N=len(positions)
+    while i<N:
+        odleglosc=np.abs(gridpoints-positions[i])
+        idmin=odleglosc.argmin()
+        if idmin==len(gridpoints)-1:
+            idmin1=idmin-1
+            idmin2=idmin
+            val1=np.abs(gridpoints[idmin2]-positions[i])/gridspacing
+            val2=np.abs(gridpoints[idmin1]-positions[i])/gridspacing
+        elif idmin==0:
+            idmin1=idmin
+            idmin2=idmin+1
+            val1=np.abs(gridpoints[idmin2]-positions[i])/gridspacing
+            val2=np.abs(gridpoints[idmin1]-positions[i])/gridspacing
+        else:
+            if odleglosc[idmin-1]>odleglosc[idmin+1]:
+                idmin1=idmin
+                idmin2=idmin+1
+                val1=np.abs(gridpoints[idmin2]-positions[i])/gridspacing
+                val2=np.abs(gridpoints[idmin1]-positions[i])/gridspacing
+            else:
+                idmin1=idmin-1
+                idmin2=idmin
+                val1=np.abs(gridpoints[idmin2]-positions[i])/gridspacing
+                val2=np.abs(gridpoints[idmin1]-positions[i])/gridspacing
+        if DEBUG: print idmin, positions[i], val1, val2
+        interpolatedresult[i]=val1*field[idmin1]+val2*field[idmin2]
+        i+=1
+    return interpolatedresult
+
 def GaussSeidel1DSolver(chargedensity):
     target=1e-6
     Delta=1.0
@@ -58,13 +93,23 @@ def GaussSeidel1DSolver(chargedensity):
 def EFieldSolver(potential):
     i=0
     E=np.zeros_like(potential)
-    print potential[1:NG-1].shape
-    print potential[1:NG].shape
-    print potential[0:NG-1].shape
     E[1:NG-1]=-(potential[2:NG]-potential[0:NG-2])/(2*gridspacing)
     E[0]=-(potential[1]-potential[0])/gridspacing
     E[NG-1]=-(potential[NG-1]-potential[NG-2])/gridspacing
     return E
+
+#Diagnostics
+
+def PlotFields(gridpoints, position, q, chargedensity, phi, field):
+    plt.plot(gridpoints, chargedensity, "ro-", label="Charge")
+    plt.scatter(gridpoints, np.zeros(NG), label="grid")
+    plt.scatter(position, q*3, c='g', label="particles")
+    plt.plot(gridpoints, phi, label="GaussSeidel solved")
+    plt.plot(gridpoints,field, label="Field")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
 ##Continuous weighting function
 ##def FirstOrderWeighting(x, position, weight, dx):
 ##    wartosc=np.zeros_like(x)
@@ -79,15 +124,14 @@ def EFieldSolver(potential):
 
 if __name__=="__main__":
     np.random.seed(1)
-    N=500
+    N=100
     L=10
-    NG=101
+    NG=51
     gridpoints=np.linspace(0,L,NG)
     gridspacing=gridpoints[1]-gridpoints[0]
-    position=10*np.random.random(N)
+    position=L*np.random.random(N)
     q=-1+2*np.random.random(N)
-    chargedensity=LinearInterpolateToGrid(position, q, gridpoints)
-
+    
     #FOURIERTRANSFORM
 ##    plt.plot(gridpoints, chargedensity, "ro-")
 ##    plt.scatter(gridpoints, np.zeros(NG))
@@ -113,18 +157,14 @@ if __name__=="__main__":
 ##    plt.show()
 
 ##    if DEBUG: print "plotting potential"
-##    potential=np.real(np.fft.irfft(potentialtransform))
-##    if DEBUG: print potential
-    plt.plot(gridpoints, chargedensity, "ro-", label="Charge")
-##    plt.plot(gridpoints, potential, "y-", label="FFT")
-    plt.scatter(gridpoints, np.zeros(NG), label="grid")
-    plt.scatter(position, np.zeros(N), c='g', label="particles")
+##    potential=np.real(np.fft.irfft(potenti
 
+##    altransform))
+####    if DEBUG: print potential
+####    plt.plot(gridpoints, potential, "y-", label="FFT")
+
+    chargedensity=LinearInterpolateToGrid(position, q, gridpoints)
     phi=GaussSeidel1DSolver(chargedensity)
-    plt.plot(gridpoints, phi, label="GaussSeidel solved")
     field=EFieldSolver(phi)
-    plt.plot(gridpoints,field, label="Field")
-    plt.legend()
-    plt.grid()
-    plt.show()
-    
+    Forces=EFieldInterpolator(position, gridpoints, field)
+    PlotFields(gridpoints, position, q, chargedensity, phi, field)
