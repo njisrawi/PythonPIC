@@ -79,14 +79,13 @@ def EFieldSolver(potential):
 
 if __name__=="__main__":
     np.random.seed(1)
-    N=3
+    N=500
     L=10
     NG=101
     gridpoints=np.linspace(0,L,NG)
     gridspacing=gridpoints[1]-gridpoints[0]
     position=10*np.random.random(N)
-    #q=-1+2*np.random.random(N)
-    q=np.ones(N)
+    q=-1+2*np.random.random(N)
     chargedensity=LinearInterpolateToGrid(position, q, gridpoints)
 
     #FOURIERTRANSFORM
@@ -126,5 +125,6 @@ if __name__=="__main__":
     field=EFieldSolver(phi)
     plt.plot(gridpoints,field, label="Field")
     plt.legend()
+    plt.grid()
     plt.show()
     
