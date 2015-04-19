@@ -6,9 +6,9 @@ from numpy.fft import fft, ifft, fftfreq
 
 from ScienceConstants import *
 Dim=1
-N=100
+N=3
 NG=10
-Size=np.array([30])
+Size=np.array([30.])
 DT=0.1
 np.random.seed(1)
 C=3e8
@@ -22,20 +22,18 @@ def RelativisticCorrectionGamma(v):
 class grid(object):
     def __init__(self):
         self.L = Size[0]
-        self.X = np.linspace(0,self.L, NG+1)
-        self.dX=self.L/NG
-        self.efield=np.zeros(NG+1)
-        self.density=np.zeros(NG+1)
-        self.freq=np.zeros(NG+1)
-        self.pot=np.zeros(NG+1)
+        self.X, self.dX = np.linspace(0,self.L, NG, retstep=True)
+        self.efield=np.zeros(NG)
+        self.density=np.zeros(NG)
+        self.freq=np.zeros(NG)
+        self.pot=np.zeros(NG)
         self.init=True
     def update(self, list_of_species):
-        self.density=np.zeros(NG+1)
+        self.density=np.zeros(NG)
         for species in list_of_species:
 ##            try:
             gridindex=(species.position[:,0]/self.L*NG).astype(int)
             interior = (gridindex+1)<NG
-            print (gridindex+1)<NG
             
 ##            self.density[:NG][gridindex]+=(self.X[(gridindex+1)[interior]]-species.position[:,0])/self.dX
 ##            self.density[:NG][gridindex]+=(species.position[:,0]-self.X[gridindex[interior]])/self.dX
@@ -46,13 +44,14 @@ class grid(object):
 ##            self.density[NG-1] += (self.X[NG] - species.position[:,0])/self.dX
 ##            self.density[0] += (species.position[:,0][-self.X[NG-1])/self.dX
             self.density *= species.charge
-        self.density[NG]=self.density[0] #a może bez tego?
+##        self.density[NG-1]=self.density[0] #a może bez tego?
 
         if self.init:
             plt.plot(self.X, self.density)
             plt.ylabel("Density")
             plt.title("Density")
-            plt.show()
+            plt.savefig("Initdensity.png")
+            plt.clf()
             self.init=False
 
 
@@ -60,17 +59,17 @@ class grid(object):
         self.freq=self.L*fftfreq(NG, self.dX)
         self.freq[0]=0.01
         self.pot = np.real(ifft(fft(self.density)[0:NG]/self.freq[0:NG]**2/4./pi**2/eps_0))
-        print self.pot
         self.efield = -np.gradient(self.pot)
 class species(object):
-    def __init__(self, mass, charge, position, velocity, number, name):
+    def __init__(self, mass, charge, position, velocity, number, name, color):
         self.name=name
+        self.color=color
         self.number=number
         self.mass=mass
         self.charge=charge
         self.position=position
         self.velocity=velocity
-    
+        self.trajectories=np.copy(self.position)
     def move(self, dt):
         self.position += self.velocity*dt
         for i in range(Dim):    #to na pewno można zrobić bez fora
@@ -80,9 +79,46 @@ class species(object):
             self.position[:,i][self.position[:,i]<0]+=Size[i]
     def accelerate(self, grid, dt):
         gridindex=(self.position/grid.L*NG).astype(int)
-        EField=((grid.X[gridindex+1]-self.position)/grid.dX*grid.efield[gridindex] + (self.position-grid.X[gridindex])/grid.dX*grid.efield[gridindex+1])[:,0]
+##        print grid.X[gridindex+1]
+##        print grid.X[gridindex]
+##        print "selfpos"
+##        print self.position
+##        print "efield"
+##        print grid.efield[gridindex]
+##        print "gridindex"
+##        print gridindex.T
+##        print "gridindex at shift"
+##        print gridindex.T+1
+##        print "efield"
+##        print grid.efield
+##        print "efield at shift"
+        nonmaxcondition=gridindex<NG-1
+        nonmaxgridindex = gridindex[nonmaxcondition]
+        maxcondition=gridindex==NG-1
+        maxgridindex=gridindex[maxcondition]
+##        maxpasstozero=np.zeros_like(maxgridindex)
+##        print self.position[maxcondition]
+##        print grid.X
+####        print grid.efield[nonmaxgridindex+1]
+####        
+####        EField=((grid.X[nonmaxgridindex+1]-self.position[gridindex<NG])/grid.dX*grid.efield[nonmaxgridindex]+ (self.position[gridindex<NG]-grid.X[nonmaxgridindex])/grid.dX*grid.efield[nonmaxgridindex+1])[:,0]
+####        EField=((grid.X[gridindex+1]-self.position)/grid.dX*grid.efield[gridindex]+ (self.position-grid.X[gridindex])/grid.dX*grid.efield[gridindex+1])[:,0]
+##        print maxgridindex.T
+##        print grid.efield
+        EField=np.zeros_like(self.position)
+####        EField[gridindex<NG-1]=np.ones_like(gridindex[gridindex<NG-1])
+####        try:
+##        print len(grid.X[nonmaxgridindex+1]), len(self.position[nonmaxcondition]), len(grid.efield[nonmaxgridindex]), len(self.position[nonmaxcondition]), len(grid.efield[nonmaxgridindex+1])
+        EField[nonmaxcondition] = (grid.X[nonmaxgridindex+1]-self.position[nonmaxcondition])/grid.dX*grid.efield[nonmaxgridindex]+(self.position[nonmaxcondition]-grid.X[nonmaxgridindex])/grid.dX*grid.efield[nonmaxgridindex+1]
+        EField[maxcondition] = -((grid.X[maxgridindex-1]-self.position[maxcondition])/grid.dX*grid.efield[maxgridindex]+(self.position[maxcondition]-grid.X[maxgridindex])/grid.dX*grid.efield[maxgridindex-1])
+##        print Construction, len(Construction)
+##        EField[gridindex<NG-1]=Construction
+##        EField[gridindex<NG-1]=((grid.X[nonmaxgridindex+1]-self.position[nonmaxcondition])/grid.dX*grid.efield[nonmaxgridindex]+(self.position[nonmaxcondition]-grid.X[nonmaxgridindex])/grid.dX*grid.efield[nonmaxgridindex+1])[:,0]
+##        except IndexError:
+##            print "had index errors"
+##        print EField.T
         acceleration=np.zeros((N,Dim))
-        acceleration[:,0]=self.charge*EField/self.mass/(RelativisticCorrectionGamma(self.velocity))
+        acceleration[:,0]=self.charge*EField[:,0]/self.mass#/(RelativisticCorrectionGamma(self.velocity))
         self.velocity+=acceleration*dt
 
         
@@ -95,18 +131,28 @@ class species(object):
     def step(self):
         self.accelerate(Grid, DT)
         self.move(DT)
+        self.trajectories=np.hstack((self.trajectories,self.position))
+def PlotAllTrajectories(ListOfSpecies):
+    for i in ListOfSpecies:
+        print i.trajectories
+        plt.plot(i.trajectories.T, label=i.name, color=i.color)
+    plt.show()
 Grid=grid()
-electrons=species(1, -1, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size/2, N, "electrons")
-protons=species(1, 1, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size/2, N, "protons")
+electrons=species(1, -1, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size/2, N, "electrons", "y")
+protons=species(1, 1, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size/2, N, "protons", "b")
 Species=[protons,electrons]
 Grid.update(Species)
+##Grid.efield=np.linspace(0,10,NG) #DEBUG
+##print "==INITIAL FIELD=="
+##print Grid.efield
 for i in Species:
     i.accelerate(Grid, -0.5*DT)
-for iterat in range(10):
+for iterat in range(100):
     for i in Species:
         i.step()
+        i.info()
     Grid.update(Species)
-
+PlotAllTrajectories(Species)
 
 ##def Time(i):
 ##    return TInitial+(TFinal-TInitial)/TFinal*i*DT
