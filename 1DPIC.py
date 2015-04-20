@@ -9,11 +9,11 @@ Dim=1
 N=100
 NG=10
 Size=np.array([30.])
-DT=0.1
+DT=0.01
 ##np.random.seed(1)
 C=3e8
 eps_0=1
-RUNITERS=300
+RUNITERS=3000
 ELEMCHARGE=10.
 
 def RelativisticCorrectionGamma(v):
@@ -33,6 +33,17 @@ class grid(object):
         self.freq=np.zeros(NG)
         self.pot=np.zeros(NG)
         self.init=True
+    def densityplot(self, filename, view=False):
+        plt.plot(self.X, self.density)
+        plt.ylabel("Charge density")
+        plt.xlabel("Position on the grid")
+        plt.title("Density plot")
+        plt.ylim(-15,15)
+        plt.savefig(filename)
+        if view:
+            plt.show()
+        plt.clf()
+        
     def update(self, list_of_species, externalfield=zerofield):
         self.density=np.zeros(NG)
         for species in list_of_species:
@@ -58,12 +69,7 @@ class grid(object):
         self.density*=1./self.dX
 
         if self.init:
-            plt.plot(self.X, self.density)
-            plt.ylabel("Density")
-            plt.title("Density")
-            plt.savefig("Initdensity.png")
-            plt.show()
-            plt.clf()
+            self.densityplot("Initdensity.png", True)
             self.init=False
 
         #FOURIER TRANSFORM
@@ -117,13 +123,13 @@ class species(object):
         self.trajectories=np.hstack((self.trajectories,self.position))
         self.velocities=np.hstack((self.velocities,self.velocity))
 def PlotAllTrajectories(ListOfSpecies):
-    plt.subplot(2,1,1)
-    for i in ListOfSpecies:
-        plt.plot(i.trajectories.T, color=i.color)
     plt.title("Run history")
-    plt.ylabel('X position')
+    for index, i in enumerate(ListOfSpecies):
+        plt.subplot(len(ListOfSpecies)+1,1,index+1)
+        plt.plot(i.velocities.T, color=i.color)
+        plt.ylabel('X velocity for ' + i.name)
 
-    plt.subplot(2,1,2)
+    plt.subplot(len(ListOfSpecies)+1,1,len(ListOfSpecies)+1)
     for i in ListOfSpecies:
         plt.plot(i.velocities.T, color=i.color)
     plt.ylabel('X velocity')
@@ -141,5 +147,8 @@ for i in Species:
 for iterat in range(RUNITERS):
     for i in Species:
         i.step()
+        if iterat%10==0:
+            Grid.densityplot("DensityIter%d.png" %(iterat))
     Grid.update(Species)
 PlotAllTrajectories(Species)
+Grid.densityplot("Finaldensity.png", True)
