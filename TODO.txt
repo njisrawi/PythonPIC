@@ -1,5 +1,0 @@
-Field interpolation at particle location
-Hook up fields to particle mover
-Hook up particle locations to density and field calculations
-
-Setup animations
