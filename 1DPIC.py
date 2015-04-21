@@ -3,18 +3,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy import sin, cos, exp, pi
 from numpy.fft import fft, ifft, fftfreq
-
+from datetime import datetime
 from ScienceConstants import *
 Dim=1
 N=100
 NG=10
 Size=np.array([30.])
-DT=0.01
-##np.random.seed(1)
+DT=0.1
+np.random.seed(1)
 C=3e8
 eps_0=1
-RUNITERS=3000
+RUNITERS=300
 ELEMCHARGE=10.
+SnapshotEveryXIterations=1
+
+ESTMAXCHARGE=N*ELEMCHARGE/Size[0]/2
+ESTMAXFIELD=N*ELEMCHARGE/Size[0]/NG/Size[0]
+INITSHOWDENS=False
+
+time=datetime.now().time()
+from time import gmtime, strftime
+##RUNTIME="%.2d%.2d%.2d" %(time[0], time[1], time[2])
+RUNTIME=strftime("%H.%M.%S")
 
 def RelativisticCorrectionGamma(v):
     speed=np.linalg.norm(v, axis=1)
@@ -24,6 +34,8 @@ def RelativisticCorrectionGamma(v):
 def zerofield(X):
     return 0
 
+
+
 class grid(object):
     def __init__(self):
         self.L = Size[0]
@@ -31,24 +43,36 @@ class grid(object):
         self.efield=np.zeros(NG)
         self.density=np.zeros(NG)
         self.freq=np.zeros(NG)
-        self.pot=np.zeros(NG)
+        self.pot=np.zeros(NG)        
         self.init=True
     def densityplot(self, filename, view=False):
-        plt.plot(self.X, self.density)
+        plt.title("Grid")
+        plt.subplot(2,1,1)
+        plt.plot(self.X, self.density, label="Density")
         plt.ylabel("Charge density")
+        plt.ylim(-ESTMAXCHARGE, ESTMAXCHARGE)
+        plt.subplot(2,1,2)
+        plt.plot(self.X,self.efield, label="eField")
+        plt.ylabel("Field")
+        plt.ylim(-ESTMAXFIELD, ESTMAXFIELD)
         plt.xlabel("Position on the grid")
-        plt.title("Density plot")
-        plt.ylim(-15,15)
         plt.savefig(filename)
         if view:
             plt.show()
         plt.clf()
+
         
     def update(self, list_of_species, externalfield=zerofield):
         self.density=np.zeros(NG)
         for species in list_of_species:
             density=np.zeros_like(self.density)
             gridindex=(species.position/self.L*NG).astype(int)
+            if ((gridindex>NG).any() or (gridindex<0).any()):
+                print "Error: particles out of bounds"
+                print "Positive indices"
+                print gridindex[gridindex>NG], species.position[gridindex>NG]
+                print "Negative indices"
+                print gridindex[gridindex<0], species.position[gridindex<0]
             nonmaxcondition=gridindex<NG-1
             nonmaxgridindex=gridindex[nonmaxcondition]
             maxcondition=(gridindex==NG-1)
@@ -58,7 +82,6 @@ class grid(object):
                 density[nonmaxgridindex]+=species.position[nonmaxcondition]-nonmaxgridindex
                 density[nonmaxgridindex+1]+=nonmaxgridindex+1-species.position[nonmaxcondition]
             except IndexError, err:
-                print nonmaxgridindex
                 print ("Error: %s.\n" %str(err))
                 pass
             density[maxgridindex]+=species.position[maxcondition]-maxgridindex
@@ -69,7 +92,7 @@ class grid(object):
         self.density*=1./self.dX
 
         if self.init:
-            self.densityplot("Initdensity.png", True)
+            self.densityplot(RUNTIME + "Initdensity.png", INITSHOWDENS)
             self.init=False
 
         #FOURIER TRANSFORM
@@ -93,8 +116,13 @@ class species(object):
         self.position += self.velocity*dt
         #wymuszanie warunków brzegowych
         for i in range(Dim):    #to na pewno można zrobić bez fora
-            self.position[:,i][self.position[:,i]>Size[i]]-=Size[i]
-            self.position[:,i][self.position[:,i]<0]+=Size[i]
+            j=0
+            while (self.position[:,i]>Size[i]).any() or (self.position[:,i]<0).any():
+##                if j>1:
+##                    print j
+                self.position[:,i][self.position[:,i]>Size[i]]-=Size[i]
+                self.position[:,i][self.position[:,i]<0]+=Size[i]
+                j+=1
     def accelerate(self, grid, dt):
         gridindex=(self.position/grid.L*NG).astype(int)
 
@@ -126,20 +154,23 @@ def PlotAllTrajectories(ListOfSpecies):
     plt.title("Run history")
     for index, i in enumerate(ListOfSpecies):
         plt.subplot(len(ListOfSpecies)+1,1,index+1)
-        plt.plot(i.velocities.T, color=i.color)
+        plt.plot(i.velocities.T, color=i.color, alpha = 0.5)
         plt.ylabel('X velocity for ' + i.name)
 
     plt.subplot(len(ListOfSpecies)+1,1,len(ListOfSpecies)+1)
     for i in ListOfSpecies:
-        plt.plot(i.velocities.T, color=i.color)
+        plt.plot(i.velocities.T, color=i.color, alpha = 0.5)
     plt.ylabel('X velocity')
     plt.xlabel("Iterations")
-    plt.savefig("Runhistory.png")
+    plt.savefig(RUNTIME + "Runhistory.png")
     plt.show()
 
 Grid=grid()
-electrons=species(1., -ELEMCHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size/2-Size/2, N, "electrons", "y")
-protons=species(1., ELEMCHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size/2-Size/2, N, "protons", "b")
+electrons=species(1., -ELEMCHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
+protons=species(1., ELEMCHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "protons", "b")
+##electrons=species(1., -ELEMCHARGE, np.random.random((N,Dim))*Size, np.zeros((N,Dim)), N, "electrons", "y")
+##protons=species(1., ELEMCHARGE, np.random.random((N,Dim))*Size, np.zeros((N,Dim)), N, "protons", "b")
+
 Species=[protons,electrons]
 Grid.update(Species)
 for i in Species:
@@ -147,8 +178,8 @@ for i in Species:
 for iterat in range(RUNITERS):
     for i in Species:
         i.step()
-        if iterat%10==0:
-            Grid.densityplot("DensityIter%d.png" %(iterat))
+    if iterat%SnapshotEveryXIterations==0:
+        Grid.densityplot(RUNTIME + "DensityIter%d.png" %(iterat))
     Grid.update(Species)
 PlotAllTrajectories(Species)
-Grid.densityplot("Finaldensity.png", True)
+Grid.densityplot(RUNTIME + "Finaldensity.png", True)
