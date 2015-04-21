@@ -20,23 +20,23 @@ BOLTZMANNKB=1.380648e-23 #J/K
 
 #SIMULATION PARAMETERS
 Dim=1
-N=100
-NG=10
-Size=np.array([1.])
-DT=0.0001
+N=256
+NG=32
+Size=np.array([1e-3])
+DT=1e-6
 np.random.seed(1)
-RUNITERS=500
+RUNITERS=5000
 TIMEITERS=np.arange(RUNITERS+1)*DT
+SnapshotEveryXIterations=100
 
-PARTICLESPERSUPER=1
+PARTICLESPERSUPER=100
 SUPERPARTICLECHARGE=PARTICLESPERSUPER*ELECTRONCHARGE #for superparticles
 SUPERPROTONMASS=PARTICLESPERSUPER*PROTONMASS
 SUPERELECTRONMASS=PARTICLESPERSUPER*ELECTRONMASS
-SnapshotEveryXIterations=100
 
-ESTMAXCHARGE=N*SUPERPARTICLECHARGE/Size[0]/2/ELECTRONCHARGE/4
+ESTMAXCHARGE=N/Size[0]*NG
 ESTMAXFIELD=N*SUPERPARTICLECHARGE/Size[0]/NG/Size[0]
-INITSHOWDENS=True
+INITSHOWDENS=False
 
 time=datetime.now().time()
 from time import gmtime, strftime
@@ -60,14 +60,35 @@ class grid(object):
         self.efield=np.zeros(NG)
         self.density=np.zeros(NG)
         self.freq=np.zeros(NG)
-        self.pot=np.zeros(NG)        
-        self.init=True
-    def densityplot(self, filename, view=False):
+        self.pot=np.zeros(NG)
+    def densityplot(self, listofspecies, filename, view=False):
+##        plt.clf()
+##        fig=plt.fig()
+##        fig.title("Grid")
+##        fig.subplot(2,1,1)
+##        fig.plot(self.X, self.density/ELECTRONCHARGE, label="Density")
+##        for i in listofspecies:
+##            fig.scatter(i.position.T, np.zeros_like(i.position.T), c=i.color, alpha=0.3)
+##        fig.ylabel("Charge density [elementary charge]")
+####        plt.ylim(-ESTMAXCHARGE, ESTMAXCHARGE)
+##        fig.subplot(2,1,2)
+##        fig.plot(self.X,self.efield, label="eField")
+##        fig.ylabel("Field")
+####        plt.ylim(-ESTMAXFIELD, ESTMAXFIELD)
+##        fig.xlabel("Position on the grid")
+##        fig.savefig(filename)
+##        if view:
+##            fig.show()
+##        return fig
+
+
         plt.title("Grid")
         plt.subplot(2,1,1)
         plt.plot(self.X, self.density/ELECTRONCHARGE, label="Density")
+        for i in listofspecies:
+            plt.scatter(i.position.T, np.zeros_like(i.position.T), c=i.color, alpha=0.3)
         plt.ylabel("Charge density [elementary charge]")
-        plt.ylim(-ESTMAXCHARGE, ESTMAXCHARGE)
+##        plt.ylim(-ESTMAXCHARGE, ESTMAXCHARGE)
         plt.subplot(2,1,2)
         plt.plot(self.X,self.efield, label="eField")
         plt.ylabel("Field")
@@ -83,41 +104,67 @@ class grid(object):
         self.density=np.zeros(NG)
         for species in list_of_species:
             density=np.zeros_like(self.density)
-            gridindex=(species.position/self.L*NG).astype(int)
-            if ((gridindex>NG).any() or (gridindex<0).any()):
-                print "Error: particles out of bounds"
-                print "Positive indices"
-                print gridindex[gridindex>NG], species.position[gridindex>NG]
-                print "Negative indices"
-                print gridindex[gridindex<0], species.position[gridindex<0]
-            nonmaxcondition=gridindex<NG-1
-            nonmaxgridindex=gridindex[nonmaxcondition]
-            maxcondition=(gridindex==NG-1)
-            maxgridindex=gridindex[maxcondition]
-            maxzeros=np.zeros_like(maxgridindex)
-            try:
-                density[nonmaxgridindex]+=species.position[nonmaxcondition]-nonmaxgridindex
-                density[nonmaxgridindex+1]+=nonmaxgridindex+1-species.position[nonmaxcondition]
-            except IndexError, err:
-                print ("Error: %s.\n" %str(err))
-                pass
-            density[maxgridindex]+=species.position[maxcondition]-maxgridindex
-            density[maxzeros]+=maxgridindex+1-species.position[maxcondition]
-            density *= species.charge
+
+
+##            gridindex=(species.position/self.L*NG).astype(int)
+##            if ((gridindex>NG).any() or (gridindex<0).any()):
+##                print "Error: particles out of bounds"
+##                print "Positive indices"
+##                print gridindex[gridindex>NG], species.position[gridindex>NG]
+##                print "Negative indices"
+##                print gridindex[gridindex<0], species.position[gridindex<0]
+##            nonmaxcondition=gridindex<NG-1
+##            nonmaxgridindex=gridindex[nonmaxcondition]
+##            maxcondition=(gridindex==NG-1)
+##            maxgridindex=gridindex[maxcondition]
+##            maxzeros=np.zeros_like(maxgridindex)
+##            try:
+##                density[nonmaxgridindex]+=species.position[nonmaxcondition]-nonmaxgridindex
+##                density[nonmaxgridindex+1]+=nonmaxgridindex+1-species.position[nonmaxcondition]
+##            except IndexError, err:
+##                print ("Error: %s.\n" %str(err))
+##                pass
+####            plt.plot(self.X, density, label=(species.name + "before"))
+##            density[maxgridindex]+=species.position[maxcondition]-maxgridindex
+####            density[maxzeros]+=maxgridindex+1-species.position[maxcondition]
+####            density[maxgridindex]=0
+####            density[maxzeros]=0
+####            plt.plot(self.X, density, label=(species.name + "after"))
+##            density *= species.charge
+##            self.density+=density
+####            plt.scatter(species.position, np.zeros_like(species.position), label=species.name)
+####            plt.legend()
+####            plt.show()
+##        self.density*=1./self.dX
+            for ppos in species.position:
+                index=int(ppos/self.dX)
+                indexpos=self.X[index]
+                w1=1-(ppos-indexpos)/self.dX
+                w2=(ppos-indexpos)/self.dX
+                if index<NG-1:
+                    density[index]+=w1*species.charge
+                    density[index+1]+=w2*species.charge
+                else:
+                    density[index]+=w1*species.charge
+                    density[0]+=w2*species.charge                    
+##                print ppos, index, indexpos, w1, w2
             self.density+=density
-
-        self.density*=1./self.dX
-
-        if self.init:
-            self.densityplot(RUNTIME + "Initdensity.png", INITSHOWDENS)
-            self.init=False
-
+        if (np.abs(self.density)>10000*ELECTRONCHARGE).any():
+            print "DUN GOOFED"
+            plt.plot(self.X, density)
+            for species in list_of_species:
+                plt.scatter(species.position, np.zeros_like(species.position), label=species.name, c=species.color, alpha=0.3)
+            plt.legend()
+            plt.show()
+##            quit()
+##        quit()
         #FOURIER TRANSFORM
         self.freq=self.L*fftfreq(NG, self.dX)
         self.freq[0]=0.01
         self.pot = np.real(ifft(fft(self.density)[0:NG]/self.freq[0:NG]**2/4./pi**2/EPSILON0))
         self.efield = -np.gradient(self.pot)
         self.efield+=externalfield(self.X)
+
 class species(object):
     def __init__(self, mass, charge, position, velocity, number, name, color):
         self.name=name
@@ -160,6 +207,7 @@ class species(object):
 
         self.velocity+=acceleration*dt
     def temperature(self):
+##for i in range
         return 0.5*self.mass*np.sqrt(np.sum(self.velocity**2)/self.number)
     def info(self):
         print "N=",self.number, self.name
@@ -192,16 +240,29 @@ def PlotAllTrajectories(ListOfSpecies):
     plt.savefig(RUNTIME + "Runhistory.png")
     plt.show()
 
+   
 Grid=grid()
+protondistribution=np.zeros((N,Dim))
+protondistribution[:,0]=np.linspace(Grid.L/10000, Grid.L*(1-1/10000), N)
+
+electrondistribution=np.zeros((N,Dim))
+electrondistribution[:,0]=protondistribution[:,0]+0.1*Grid.L*np.sin(2*pi*protondistribution[:,0]/Grid.L)
+
 #hot start
 electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
-protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "protons", "b")
+##protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "protons", "b")
+
+#cosine start
+protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, protondistribution, np.zeros((N,Dim)), N, "protons", "b")
+electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, electrondistribution, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
+
 #cold start
 ##electrons=species(1., -SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.zeros((N,Dim)), N, "electrons", "y")
 ##protons=species(1., SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.zeros((N,Dim)), N, "protons", "b")
 
 Species=[protons,electrons]
 Grid.update(Species)
+Grid.densityplot(Species, RUNTIME + "Initdensity.png", INITSHOWDENS)
 for i in Species:
     i.accelerate(Grid, -0.5*DT)
 for iterat in range(RUNITERS):
@@ -209,7 +270,10 @@ for iterat in range(RUNITERS):
         i.step()
 ##        print i.name, i.temperature()
     if iterat%SnapshotEveryXIterations==0:
-        Grid.densityplot(RUNTIME + "DensityIter%d.png" %(iterat))
+        Grid.densityplot(Species, RUNTIME + "DensityIter%d.png" %(iterat))
     Grid.update(Species)
 PlotAllTrajectories(Species)
-Grid.densityplot(RUNTIME + "Finaldensity.png", True)
+Grid.densityplot(Species, RUNTIME + "Finaldensity.png", True)
+
+
+##for i in range
