@@ -19,15 +19,17 @@ BOLTZMANNKB=1.380648e-23 #J/K
 ##BOLTZMANNKBEV=8.6173324e-5 #eV/K
 
 #SIMULATION PARAMETERS
-Dim=1
-N=256
+Dim=3
+N=128
 NG=32
-Size=np.array([1e-3])
+Size=np.array([1e-3, 1e-4, 1e-4])
 DT=1e-6
 np.random.seed(1)
 RUNITERS=5000
 TIMEITERS=np.arange(RUNITERS+1)*DT
-SnapshotEveryXIterations=100
+SnapshotEveryXIterations=1000
+##MagneticFieldStrength=np.array([0,0,1.]) #teslas
+##MagneticFieldStrength=1e-6
 
 PARTICLESPERSUPER=100
 SUPERPARTICLECHARGE=PARTICLESPERSUPER*ELECTRONCHARGE #for superparticles
@@ -50,8 +52,6 @@ def RelativisticCorrectionGamma(v):
 
 def zerofield(X):
     return 0
-
-
 
 class grid(object):
     def __init__(self):
@@ -136,7 +136,7 @@ class grid(object):
 ####            plt.legend()
 ####            plt.show()
 ##        self.density*=1./self.dX
-            for ppos in species.position:
+            for ppos in species.position[:,0]:
                 index=int(ppos/self.dX)
                 indexpos=self.X[index]
                 w1=1-(ppos-indexpos)/self.dX
@@ -146,8 +146,7 @@ class grid(object):
                     density[index+1]+=w2*species.charge
                 else:
                     density[index]+=w1*species.charge
-                    density[0]+=w2*species.charge                    
-##                print ppos, index, indexpos, w1, w2
+                    density[0]+=w2*species.charge              
             self.density+=density
         if (np.abs(self.density)>10000*ELECTRONCHARGE).any():
             print "DUN GOOFED"
@@ -164,6 +163,9 @@ class grid(object):
         self.pot = np.real(ifft(fft(self.density)[0:NG]/self.freq[0:NG]**2/4./pi**2/EPSILON0))
         self.efield = -np.gradient(self.pot)
         self.efield+=externalfield(self.X)
+
+
+
 
 class species(object):
     def __init__(self, mass, charge, position, velocity, number, name, color):
@@ -184,7 +186,7 @@ class species(object):
         for i in range(Dim):    #to na pewno można zrobić bez fora
             j=0
             while (self.position[:,i]>Size[i]).any() or (self.position[:,i]<0).any():
-##                if j>1:
+##                if j>50:
 ##                    print j
                 self.position[:,i][self.position[:,i]>Size[i]]-=Size[i]
                 self.position[:,i][self.position[:,i]<0]+=Size[i]
@@ -203,12 +205,15 @@ class species(object):
         EField[maxcondition] = (grid.X[maxzeros]-self.position[maxcondition])/grid.dX*grid.efield[maxgridindex]+(maxgridindex+1-self.position[maxcondition])/grid.dX*grid.efield[maxzeros]
 
         acceleration=np.zeros((N,Dim))
-        acceleration[:,0]=self.charge*EField[:,0]/self.mass/(RelativisticCorrectionGamma(self.velocity))
-
+        acceleration[:,0]=EField[:,0]
+        #MAGFIELD
+##        acceleration[:,0]+=MagneticFieldStrength*self.velocity[:,1]
+##        acceleration[:,1]-=MagneticFieldStrength*self.velocity[:,0]
+        acceleration*=self.charge/self.mass
         self.velocity+=acceleration*dt
     def temperature(self):
 ##for i in range
-        return 0.5*self.mass*np.sqrt(np.sum(self.velocity**2)/self.number)
+        return self.mass*np.mean(np.square(self.velocity))/BOLTZMANNKB
     def info(self):
         print "N=",self.number, self.name
         print "m=",self.mass, "q=", self.charge
@@ -217,24 +222,28 @@ class species(object):
     def step(self):
         self.accelerate(Grid, DT)
         self.move(DT)
-        self.trajectories=np.hstack((self.trajectories,self.position))
-        self.velocities=np.hstack((self.velocities,self.velocity))
+        self.trajectories=np.dstack((self.trajectories,self.position))
+        self.velocities=np.dstack((self.velocities,self.velocity))
         self.temperatures=np.hstack((self.temperatures,self.temperature()))
+
+
+#=========GENERAL DIAGNOSTICS===========
+
 def PlotAllTrajectories(ListOfSpecies):
     plt.title("Run history")
     for index, i in enumerate(ListOfSpecies):
         plt.subplot(len(ListOfSpecies)+2,1,index+1)
-        plt.plot(TIMEITERS, i.velocities.T, color=i.color, alpha = 0.8)
+        plt.plot(TIMEITERS, i.velocities[:,0,:].T, color=i.color, alpha = 0.8)
         plt.ylabel('X velocity for ' + i.name + '[m/s]')
 
     plt.subplot(len(ListOfSpecies)+2,1,len(ListOfSpecies)+1)
     for i in ListOfSpecies:
-        plt.plot(TIMEITERS, i.velocities.T, color=i.color, alpha = 0.5)
-    plt.ylabel('X velocity [m/s]')
+        plt.plot(TIMEITERS, i.velocities[:,2,:].T, color=i.color, alpha = 0.5)
+    plt.ylabel('Y velocity [m/s]')
 
     plt.subplot(len(ListOfSpecies)+2,1,len(ListOfSpecies)+2)
     for i in ListOfSpecies:
-        plt.plot(TIMEITERS, i.temperatures/BOLTZMANNKB, color=i.color)
+        plt.plot(TIMEITERS, i.temperatures, color=i.color)
     plt.ylabel("Temperature [K]")
     plt.xlabel("Time [s]")
     plt.savefig(RUNTIME + "Runhistory.png")
@@ -243,18 +252,26 @@ def PlotAllTrajectories(ListOfSpecies):
    
 Grid=grid()
 protondistribution=np.zeros((N,Dim))
-protondistribution[:,0]=np.linspace(Grid.L/10000, Grid.L*(1-1/10000), N)
-
 electrondistribution=np.zeros((N,Dim))
-electrondistribution[:,0]=protondistribution[:,0]+0.1*Grid.L*np.sin(2*pi*protondistribution[:,0]/Grid.L)
+
+###cosine start
+##protondistribution[:,0]=np.linspace(Grid.L/10000, Grid.L*(1-1/10000), N)
+##electrondistribution[:,0]=protondistribution[:,0]+0.1*Grid.L*np.sin(2*pi*protondistribution[:,0]/Grid.L)
+##protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, protondistribution, np.zeros((N,Dim)), N, "protons", "b")
+##electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, electrondistribution, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
 
 #hot start
-electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
+##electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
 ##protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.random((N,Dim))*Size-Size/2, N, "protons", "b")
 
-#cosine start
-protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, protondistribution, np.zeros((N,Dim)), N, "protons", "b")
-electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, electrondistribution, np.random.random((N,Dim))*Size-Size/2, N, "electrons", "y")
+#maxwellstart
+INITTEMPERATURE=1
+protons=species(SUPERPROTONMASS, SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.normal(0,np.sqrt(BOLTZMANNKB*INITTEMPERATURE/SUPERPROTONMASS), (N,Dim)), N, "protons", "b")
+electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.random.normal(0,np.sqrt(BOLTZMANNKB*INITTEMPERATURE/SUPERELECTRONMASS), (N,Dim)), N, "electrons", "y")
+
+
+
+
 
 #cold start
 ##electrons=species(1., -SUPERPARTICLECHARGE, np.random.random((N,Dim))*Size, np.zeros((N,Dim)), N, "electrons", "y")
@@ -262,10 +279,10 @@ electrons=species(SUPERELECTRONMASS, -SUPERPARTICLECHARGE, electrondistribution,
 
 Species=[protons,electrons]
 Grid.update(Species)
-Grid.densityplot(Species, RUNTIME + "Initdensity.png", INITSHOWDENS)
 for i in Species:
     i.accelerate(Grid, -0.5*DT)
 for iterat in range(RUNITERS):
+    print("Iteration", iterat)
     for i in Species:
         i.step()
 ##        print i.name, i.temperature()
